@@ -75,7 +75,7 @@ async def replace_student(message: types.Message):
     else:
         await message.answer("❌ Студента не знайдено в списку.")
 
-# Веб-сервер с динамическим портом для Render и UptimeRobot
+# Веб-сервер для прохождения проверки портов Render и UptimeRobot
 async def handle_ping(request):
     return web.Response(text="Bot is running!")
 
@@ -87,10 +87,14 @@ async def start_web_server():
     port = int(os.environ.get("PORT", 10000))
     site = web.TCPSite(runner, '0.0.0.0', port)
     await site.start()
+    logging.info(f"🟢 Web server successfully started and listening on port {port}")
 
 async def main():
-    await start_web_server()
-    await dp.start_polling(bot)
+    # Параллельный запуск веб-сервера и телеграм-бота
+    await asyncio.gather(
+        start_web_server(),
+        dp.start_polling(bot)
+    )
 
 if __name__ == '__main__':
     asyncio.run(main())
