@@ -17,6 +17,7 @@ logging.basicConfig(level=logging.INFO)
 bot = Bot(token=API_TOKEN)
 dp = Dispatcher()
 
+# Постійний непорушний список студентів (номери 1-28 назавжди зафіксовані)
 STUDENTS = [
     "Абіякін Олександр Ігорович", "Бережанський Владислав Олександрович", "Било Владислав Віталійович",
     "Була Олексій Богданович", "Вітенько Катерина Олегівна", "Гніздів Роман Володимирович",
@@ -30,6 +31,7 @@ STUDENTS = [
     "Фурман Максим Миколайович"
 ]
 
+# Черга у вигляді індексів (не змінює номери людей у базовому списку)
 queue_indices = list(range(len(STUDENTS)))
 excluded_indices = set()
 START_DATE = date(2026, 1, 1)
@@ -52,6 +54,7 @@ def get_duty_pair_for_date(target_date: date):
 
 async def set_main_menu(bot: Bot):
     commands = [
+        BotCommand(command="start", description="Головна сторінка"),
         BotCommand(command="schedule", description="Графік на тиждень"),
         BotCommand(command="history", description="Історія минулих чергувань"),
         BotCommand(command="stats", description="Статистика чергувань"),
@@ -60,6 +63,15 @@ async def set_main_menu(bot: Bot):
         BotCommand(command="help", description="Список команд")
     ]
     await bot.set_my_commands(commands)
+
+@dp.message(Command("start"))
+async def send_start(message: types.Message):
+    text = (
+        "🤖 **Бот розкладу чергувань групи КІ-106**\n"
+        "Автор: Маличок Діана ([@l5211180124](https://t.me/l5211180124))\n\n"
+        "Скористайтеся командою /help, щоб переглянути список доступних команд."
+    )
+    await message.answer(text, parse_mode="Markdown", disable_web_page_preview=True)
 
 @dp.message(Command("schedule"))
 async def send_schedule(message: types.Message):
@@ -164,6 +176,7 @@ async def show_students_list(message: types.Message):
 async def send_help(message: types.Message):
     text = (
         "🤖 **Доступні команди бота:**\n\n"
+        "• `/start` — Головна сторінка та інформація\n"
         "• `/schedule` — Графік на тиждень\n"
         "• `/history` — Історія минулих чергувань\n"
         "• `/stats` — Статистика кількості чергувань\n"
