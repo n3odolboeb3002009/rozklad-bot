@@ -175,7 +175,7 @@ async def send_help(message: types.Message):
         text += (
             "\n👑 **Команди адміністратора:**\n"
             "• `/replace [н1] [н2]` — Поміняти двох місцями (напр: `/replace 1 6`)\n"
-            "• `/skip` — Поміняти місцями першого та другого у черзі (перенести сьогоднішнього на завтра)\n"
+            "• `/skip` — Пропустити поточного (зсунути чергу вперед)\n"
             "• `/exclude [номер]` — Тимчасово приховати студента\n"
             "• `/include [номер]` — Повернути студента у чергу\n"
             "• `/reset` — Скинути чергу до початкового стану\n"
@@ -208,20 +208,17 @@ async def skip_student(message: types.Message):
         return
     
     active_list = get_active_students()
-    if len(active_list) < 2:
-        await message.answer("❌ Недостатньо активних студентів для перестановки.")
+    if not active_list:
+        await message.answer("❌ Немає активних студентів у списку.")
         return
     
-    # Беремо першого та другого з активних і міняємо їх місцями у загальному списку
-    p1 = active_list[0]
-    p2 = active_list[1]
+    first_student = active_list[0]
+    orig_idx = current_student_list.index(first_student)
     
-    idx1 = current_student_list.index(p1)
-    idx2 = current_student_list.index(p2)
+    current_student_list.pop(orig_idx)
+    current_student_list.insert(0, first_student)
     
-    current_student_list[idx1], current_student_list[idx2] = current_student_list[idx2], current_student_list[idx1]
-    
-    await message.answer(f"✅ Чергу зміщено. Студент **{p1}** помінявся місцями з **{p2}** (сьогодні та завтра міняються місцями).", parse_mode="Markdown")
+    await message.answer(f"✅ Чергу зсунуто. Студент **{first_student}** пропущений вперед.", parse_mode="Markdown")
 
 @dp.message(Command("exclude"))
 async def exclude_student(message: types.Message):
@@ -237,7 +234,7 @@ async def exclude_student(message: types.Message):
     if 0 <= idx < len(current_student_list):
         student = current_student_list[idx]
         excluded_students.add(student)
-        await message.answer(f"🔴 Студент **{student}** тимчасово видалений з черги.", parse_mode="Markdown")
+        await message.answer(f"🔴 Студент **{student}** тимчасово видалений з чергування.", parse_mode="Markdown")
     else:
         await message.answer("❌ Неправильний номер студента.")
 
@@ -308,6 +305,7 @@ async def start_web_server():
     await site.start()
 
 async def main():
+    await set_main_menu(bot)
     asyncio.create_task(daily_reminder())
     await asyncio.gather(
         start_web_server(),
