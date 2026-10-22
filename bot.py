@@ -1,6 +1,7 @@
 import asyncio
 import logging
-from datetime import datetime, date
+import os
+from datetime import datetime, date, timedelta
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from aiohttp import web
@@ -41,8 +42,6 @@ def get_duty_pair_for_date(target_date: date):
     p2 = current_student_list[(idx + 1) % len(current_student_list)]
     return p1, p2
 
-from datetime import timedelta
-
 @dp.message(Command("schedule"))
 async def send_schedule(message: types.Message):
     today = date.today()
@@ -76,7 +75,7 @@ async def replace_student(message: types.Message):
     else:
         await message.answer("❌ Студента не знайдено в списку.")
 
-# Веб-сервер для фиктивного порта на Render
+# Веб-сервер с динамическим портом для Render и UptimeRobot
 async def handle_ping(request):
     return web.Response(text="Bot is running!")
 
@@ -85,7 +84,8 @@ async def start_web_server():
     app.router.add_get('/', handle_ping)
     runner = web.AppRunner(app)
     await runner.setup()
-    site = web.TCPSite(runner, '0.0.0.0', 10000)
+    port = int(os.environ.get("PORT", 10000))
+    site = web.TCPSite(runner, '0.0.0.0', port)
     await site.start()
 
 async def main():
