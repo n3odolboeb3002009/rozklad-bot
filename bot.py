@@ -7,7 +7,7 @@ from aiogram.filters import Command
 from aiohttp import web
 
 # Токен и настройки
-API_TOKEN = '7611800171:AAH8a9b3sM8-4C-06U-P0zI1c8_w38s2y6A'
+API_TOKEN = '8649918373:AAHkW1z6a58FWPiyqwdQNnlo6VfBlkmIhDE'
 ADMIN_ID = 5211180124
 
 logging.basicConfig(level=logging.INFO)
