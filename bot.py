@@ -15,18 +15,18 @@ logging.basicConfig(level=logging.INFO)
 bot = Bot(token=API_TOKEN)
 dp = Dispatcher()
 
-# Исходный список 28 студентов
+# Повний список 28 студентів (без Харишина та Гриціва)
 STUDENTS = [
-    "Бабій Дмитро Олегович", "Баран Юрій Володимирович", "Бейко Іван Михайлович",
-    "Болехівський Данило Юрійович", "Бомок Катерина Анатоліївна", "Бонк Денис Русланович",
-    "Борейко Олексій Тарасович", "Валіон Артем Олександрович", "Вовк Олександр Романович",
-    "Волянюк Остап Богданович", "Герега Олег Ігорович", "Гуляк Данило Ігорович",
-    "Заставний Артем Андрійович", "Кобилянський Владислав Віталійович", "Козачонер Марк Олександрович",
-    "Лазуркевич Максим Миколайович", "Маличок Діана Євгенівна", "Микієвич Денис Віталійович",
-    "Ничик Андрій Сергійович", "Паламарчук Павло Олександрович", "Романів Олег Ігорович",
-    "Середа Марія Миколаївна", "Сивопляс Захар Олексійович", "Слободян Роман Андрійович",
-    "Харкарліс Олександр Ігорович", "Цепелінда Денис Сергійович", "Яценко Станіслав Костянтинович",
-    "Яцух В'ячеслав Володимирович"
+    "Абіякін Олександр Ігорович", "Бережанський Владислав Олександрович", "Било Владислав Віталійович",
+    "Була Олексій Богданович", "Вітенько Катерина Олегівна", "Гніздів Роман Володимирович",
+    "Гончаров Сергій Олександрович", "Горпинич Ілля Володимирович", "Гуляка Дмитро Андрійович",
+    "Давидович Мар'ян Ігорович", "Дручок Тарас Володимирович", "Коп'як Матвій Володимирович",
+    "Лазар Максим Мирославович", "Лівінський Володимир Олегович", "Любчик Марк Віталійович",
+    "Максим'як Михайло Юрійович", "Маличок Діана Євгенівна", "Матушинець Денис Євгенович",
+    "Мацалап Станіслав Юрійович", "Милян Михайло Андрійович", "Ориник Владислав Степанович",
+    "Пісаржевський Денис Назарович", "Порохняк Дмитрій", "Серба В'ячеслав Михайлович",
+    "Сидій Арсен Вікторович", "Скочило Максим Андрійович", "Твердохліб Євген Ярославович",
+    "Фурман Максим Миколайович"
 ]
 
 current_student_list = STUDENTS.copy()
@@ -58,17 +58,26 @@ async def send_schedule(message: types.Message):
             text += f"🟢 **{date_str} ({day_name}):** {pair[0]} та {pair[1]}\n"
     await message.answer(text, parse_mode="Markdown")
 
+@dp.message(Command("list"))
+async def show_students_list(message: types.Message):
+    text = "📋 **Список студентів КІ-106:**\n\n"
+    for i, name in enumerate(STUDENTS, 1):
+        text += f"{i}. {name}\n"
+    await message.answer(text, parse_mode="Markdown")
+
 @dp.message(Command("help"))
 async def send_help(message: types.Message):
     text = (
-        "🤖 **Доступные команды бота:**\n\n"
-        "• `/schedule` — Показать график чергувания на неделю\n"
-        "• `/help` — Показать список доступных команд\n"
+        "🤖 **Доступні команди бота:**\n\n"
+        "• `/schedule` — Показать график чергування на тиждень\n"
+        "• `/list` — Показати повний список студентів з номерами\n"
+        "• `/help` — Показати список доступних команд\n"
     )
     if message.from_user.id == ADMIN_ID:
         text += (
-            "\n👑 **Команды администратора:**\n"
-            "• `/replace Прізвище Ім'я По батькові` — Перенести студента в конец очереди"
+            "\n👑 **Команди адміністратора:**\n"
+            "• `/replace [номер або ПІБ]` — Перенести студента в кінець черги\n"
+            "_Приклад:_ `/replace 17` або `/replace Маличок`"
         )
     await message.answer(text, parse_mode="Markdown")
 
@@ -79,17 +88,29 @@ async def replace_student(message: types.Message):
         return
     args = message.text.split(maxsplit=1)
     if len(args) < 2:
-        await message.answer("⚠️ Вкажіть ПІБ: `/replace Прізвище Ім'я По батькові`", parse_mode="Markdown")
+        await message.answer("⚠️ Вкажіть номер або ПІБ: `/replace 17` або `/replace Маличок`", parse_mode="Markdown")
         return
-    name_to_replace = args[1].strip()
-    if name_to_replace in current_student_list:
+    
+    query = args[1].strip()
+    name_to_replace = None
+
+    if query.isdigit():
+        idx = int(query) - 1
+        if 0 <= idx < len(STUDENTS):
+            name_to_replace = STUDENTS[idx]
+    else:
+        for student in STUDENTS:
+            if query.lower() in student.lower():
+                name_to_replace = student
+                break
+
+    if name_to_replace and name_to_replace in current_student_list:
         current_student_list.remove(name_to_replace)
         current_student_list.append(name_to_replace)
         await message.answer(f"✅ **{name_to_replace}** перенесено в кінець черги.", parse_mode="Markdown")
     else:
-        await message.answer("❌ Студента не знайдено в списку.")
+        await message.answer("❌ Студента не знайдено за цим номером або ім'ям.")
 
-# Веб-сервер для прохождения проверки портов Render и UptimeRobot
 async def handle_ping(request):
     return web.Response(text="Bot is running!")
 
