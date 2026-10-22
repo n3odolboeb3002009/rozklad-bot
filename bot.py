@@ -31,7 +31,7 @@ STUDENTS = [
 ]
 
 current_student_list = STUDENTS.copy()
-excluded_students = set()  # Множина тимчасово видалених студентів
+excluded_students = set()
 START_DATE = date(2026, 1, 1)
 
 def get_active_students():
@@ -109,7 +109,6 @@ async def send_stats(message: types.Message):
     current_d = START_DATE
     while current_d <= today:
         if current_d.weekday() != 6:
-            # Для статистики використовуємо поточну логіку розрахунку
             days_diff = (current_d - START_DATE).days
             active_list = get_active_students()
             if active_list:
@@ -176,9 +175,9 @@ async def send_help(message: types.Message):
         text += (
             "\n👑 **Команди адміністратора:**\n"
             "• `/replace [н1] [н2]` — Поміняти двох місцями (напр: `/replace 1 6`)\n"
-            "• `/skip` — Пропустити поточного студента\n"
-            "• `/exclude [номер]` — Тимчасово приховати студента з чергування\n"
-            "• `/include [номер]` — Повернути студента назад у чергу\n"
+            "• `/skip` — Поміняти місцями першого та другого у черзі (перенести сьогоднішнього на завтра)\n"
+            "• `/exclude [номер]` — Тимчасово приховати студента\n"
+            "• `/include [номер]` — Повернути студента у чергу\n"
             "• `/reset` — Скинути чергу до початкового стану\n"
         )
     await message.answer(text, parse_mode="Markdown")
@@ -209,15 +208,20 @@ async def skip_student(message: types.Message):
         return
     
     active_list = get_active_students()
-    if not active_list:
-        await message.answer("❌ Немає активних студентів у списку.")
+    if len(active_list) < 2:
+        await message.answer("❌ Недостатньо активних студентів для перестановки.")
         return
     
-    first = active_list[0]
-    orig_idx = current_student_list.index(first)
-    current_student_list.pop(orig_idx)
-    current_student_list.insert(orig_idx + 1, first)
-    await message.answer(f"✅ Чергу зміщено. Студент **{first}** пропущений на одну позицію вперед.", parse_mode="Markdown")
+    # Беремо першого та другого з активних і міняємо їх місцями у загальному списку
+    p1 = active_list[0]
+    p2 = active_list[1]
+    
+    idx1 = current_student_list.index(p1)
+    idx2 = current_student_list.index(p2)
+    
+    current_student_list[idx1], current_student_list[idx2] = current_student_list[idx2], current_student_list[idx1]
+    
+    await message.answer(f"✅ Чергу зміщено. Студент **{p1}** помінявся місцями з **{p2}** (сьогодні та завтра міняються місцями).", parse_mode="Markdown")
 
 @dp.message(Command("exclude"))
 async def exclude_student(message: types.Message):
