@@ -68,7 +68,7 @@ async def set_main_menu(bot: Bot):
 async def send_start(message: types.Message):
     text = (
         "🤖 **Бот розкладу чергувань групи КІ-106**\n"
-        "Автор: Маличок Діана ([@l5211180124](https://t.me/l5211180124))\n\n"
+        "Автор: ([@l5211180124](https://t.me/l5211180124))\n\n"
         "Скористайтеся командою /help, щоб переглянути список доступних команд."
     )
     await message.answer(text, parse_mode="Markdown", disable_web_page_preview=True)
