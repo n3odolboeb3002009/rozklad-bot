@@ -67,7 +67,7 @@ async def set_main_menu(bot: Bot):
 @dp.message(Command("start"))
 async def send_start(message: types.Message):
     text = (
-        "🤖 **Бот розкладу чергувань групи КІ-106**\n"
+        "**Бот розкладу чергувань групи КІ-106**\n"
         "Автор: ([@l5211180124](https://t.me/l5211180124))\n\n"
         "Скористайтеся командою /help, щоб переглянути список доступних команд."
     )
@@ -175,7 +175,7 @@ async def show_students_list(message: types.Message):
 @dp.message(Command("help"))
 async def send_help(message: types.Message):
     text = (
-        "🤖 **Доступні команди бота:**\n\n"
+        "**Доступні команди бота:**\n\n"
         "• `/start` — Головна сторінка та інформація\n"
         "• `/schedule` — Графік на тиждень\n"
         "• `/history` — Історія минулих чергувань\n"
