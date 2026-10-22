@@ -31,16 +31,23 @@ STUDENTS = [
 ]
 
 current_student_list = STUDENTS.copy()
+excluded_students = set()  # Множина тимчасово видалених студентів
 START_DATE = date(2026, 1, 1)
 
+def get_active_students():
+    return [s for s in current_student_list if s not in excluded_students]
+
 def get_duty_pair_for_date(target_date: date):
+    active_list = get_active_students()
+    if not active_list or target_date.weekday() == 6:
+        return None
+    
     days_diff = (target_date - START_DATE).days
     total_working_days = sum(1 for d in range(days_diff) if (START_DATE + timedelta(days=d)).weekday() != 6) if days_diff > 0 else 0
-    if target_date.weekday() == 6:
-        return None
-    idx = (total_working_days * 2) % len(current_student_list)
-    p1 = current_student_list[idx]
-    p2 = current_student_list[(idx + 1) % len(current_student_list)]
+    
+    idx = (total_working_days * 2) % len(active_list)
+    p1 = active_list[idx]
+    p2 = active_list[(idx + 1) % len(active_list)]
     return p1, p2
 
 async def set_main_menu(bot: Bot):
@@ -71,7 +78,10 @@ async def send_schedule(message: types.Message):
             text += f"🔴 **{date_str} ({day_name}):** Вихідний\n"
         else:
             pair = get_duty_pair_for_date(day_date)
-            text += f"🟢 **{date_str} ({day_name}):** {pair[0]} та {pair[1]}\n"
+            if pair:
+                text += f"🟢 **{date_str} ({day_name}):** {pair[0]} та {pair[1]}\n"
+            else:
+                text += f"⚪ **{date_str} ({day_name}):** Немає активних студентів\n"
     await message.answer(text, parse_mode="Markdown")
 
 @dp.message(Command("history"))
@@ -87,7 +97,8 @@ async def send_history(message: types.Message):
             text += f"🔴 **{date_str} ({day_name}):** Вихідний\n"
         else:
             pair = get_duty_pair_for_date(day_date)
-            text += f"⚪ **{date_str} ({day_name}):** {pair[0]} та {pair[1]}\n"
+            if pair:
+                text += f"⚪ **{date_str} ({day_name}):** {pair[0]} та {pair[1]}\n"
     await message.answer(text, parse_mode="Markdown")
 
 @dp.message(Command("stats"))
@@ -98,23 +109,30 @@ async def send_stats(message: types.Message):
     current_d = START_DATE
     while current_d <= today:
         if current_d.weekday() != 6:
-            pair = get_duty_pair_for_date(current_d)
-            if pair:
-                if pair[0] in counts: counts[pair[0]] += 1
-                if pair[1] in counts: counts[pair[1]] += 1
+            # Для статистики використовуємо поточну логіку розрахунку
+            days_diff = (current_d - START_DATE).days
+            active_list = get_active_students()
+            if active_list:
+                total_working_days = sum(1 for d in range(days_diff) if (START_DATE + timedelta(days=d)).weekday() != 6) if days_diff > 0 else 0
+                idx = (total_working_days * 2) % len(active_list)
+                p1 = active_list[idx]
+                p2 = active_list[(idx + 1) % len(active_list)]
+                if p1 in counts: counts[p1] += 1
+                if p2 in counts: counts[p2] += 1
         current_d += timedelta(days=1)
 
     sorted_stats = sorted(counts.items(), key=lambda x: x[1], reverse=True)
     text = "📊 **Статистика чергувань (скільки разів чергували):**\n\n"
     for name, count in sorted_stats:
-        text += f"• {name} — {count} раз(и)\n"
+        status = " (тимчасово видалений)" if name in excluded_students else ""
+        text += f"• {name}{status} — {count} раз(и)\n"
     await message.answer(text, parse_mode="Markdown")
 
 @dp.message(Command("find"))
 async def find_student_duties(message: types.Message):
     args = message.text.split(maxsplit=1)
     if len(args) < 2:
-        await message.answer("⚠️ Вкажіть прізвище: `/find Маличок`", parse_mode="Markdown")
+        await message.answer("⚠️ **Не вказано прізвище!**\nПриклад використання:\n`/find Маличок`", parse_mode="Markdown")
         return
     
     query = args[1].strip().lower()
@@ -139,7 +157,8 @@ async def find_student_duties(message: types.Message):
 async def show_students_list(message: types.Message):
     text = "📋 **Поточний порядок черги (КІ-106):**\n\n"
     for i, name in enumerate(current_student_list, 1):
-        text += f"{i}. {name}\n"
+        status = " 🔴 *(тимчасово видалений)*" if name in excluded_students else ""
+        text += f"{i}. {name}{status}\n"
     await message.answer(text, parse_mode="Markdown")
 
 @dp.message(Command("help"))
@@ -156,9 +175,11 @@ async def send_help(message: types.Message):
     if message.from_user.id in ADMIN_IDS:
         text += (
             "\n👑 **Команди адміністратора:**\n"
-            "• `/replace [н1] [н2]` — Поміняти двох студентів місцями (напр: `/replace 1 6`)\n"
-            "• `/skip` — Пропустити поточного студента (зсунути чергу вправо)\n"
-            "• `/reset` — Скинути чергу до початкового списку\n"
+            "• `/replace [н1] [н2]` — Поміняти двох місцями (напр: `/replace 1 6`)\n"
+            "• `/skip` — Пропустити поточного студента\n"
+            "• `/exclude [номер]` — Тимчасово приховати студента з чергування\n"
+            "• `/include [номер]` — Повернути студента назад у чергу\n"
+            "• `/reset` — Скинути чергу до початкового стану\n"
         )
     await message.answer(text, parse_mode="Markdown")
 
@@ -169,7 +190,7 @@ async def replace_students(message: types.Message):
         return
     args = message.text.split()
     if len(args) < 3 or not args[1].isdigit() or not args[2].isdigit():
-        await message.answer("⚠️ Вкажіть два числа: `/replace 1 6`", parse_mode="Markdown")
+        await message.answer("⚠️ **Неправильний формат!**\nПриклад використання:\n`/replace 1 6` (поміняти місцями 1-го і 6-го)", parse_mode="Markdown")
         return
     
     idx1 = int(args[1]) - 1
@@ -187,9 +208,55 @@ async def skip_student(message: types.Message):
         await message.answer("❌ Ця команда доступна тільки адміністратору.")
         return
     
-    first = current_student_list.pop(0)
-    current_student_list.insert(1, first)
+    active_list = get_active_students()
+    if not active_list:
+        await message.answer("❌ Немає активних студентів у списку.")
+        return
+    
+    first = active_list[0]
+    orig_idx = current_student_list.index(first)
+    current_student_list.pop(orig_idx)
+    current_student_list.insert(orig_idx + 1, first)
     await message.answer(f"✅ Чергу зміщено. Студент **{first}** пропущений на одну позицію вперед.", parse_mode="Markdown")
+
+@dp.message(Command("exclude"))
+async def exclude_student(message: types.Message):
+    if message.from_user.id not in ADMIN_IDS:
+        await message.answer("❌ Ця команда доступна тільки адміністратору.")
+        return
+    args = message.text.split()
+    if len(args) < 2 or not args[1].isdigit():
+        await message.answer("⚠️ **Не вказано номер студента!**\nПриклад використання:\n`/exclude 5`", parse_mode="Markdown")
+        return
+    
+    idx = int(args[1]) - 1
+    if 0 <= idx < len(current_student_list):
+        student = current_student_list[idx]
+        excluded_students.add(student)
+        await message.answer(f"🔴 Студент **{student}** тимчасово видалений з черги.", parse_mode="Markdown")
+    else:
+        await message.answer("❌ Неправильний номер студента.")
+
+@dp.message(Command("include"))
+async def include_student(message: types.Message):
+    if message.from_user.id not in ADMIN_IDS:
+        await message.answer("❌ Ця команда доступна тільки адміністратору.")
+        return
+    args = message.text.split()
+    if len(args) < 2 or not args[1].isdigit():
+        await message.answer("⚠️ **Не вказано номер студента!**\nПриклад використання:\n`/include 5`", parse_mode="Markdown")
+        return
+    
+    idx = int(args[1]) - 1
+    if 0 <= idx < len(current_student_list):
+        student = current_student_list[idx]
+        if student in excluded_students:
+            excluded_students.remove(student)
+            await message.answer(f"🟢 Студент **{student}** повернутий у чергу.", parse_mode="Markdown")
+        else:
+            await message.answer("ℹ️ Цей студент і так активний у черзі.")
+    else:
+        await message.answer("❌ Неправильний номер студента.")
 
 @dp.message(Command("reset"))
 async def reset_list(message: types.Message):
@@ -197,9 +264,10 @@ async def reset_list(message: types.Message):
         await message.answer("❌ Ця команда доступна тільки адміністратору.")
         return
     
-    global current_student_list
+    global current_student_list, excluded_students
     current_student_list = STUDENTS.copy()
-    await message.answer("🔄 Список черги успішно скинуто до початкового стану!", parse_mode="Markdown")
+    excluded_students.clear()
+    await message.answer("🔄 Список черги успішно скинуто, а всі видалення скасовані!", parse_mode="Markdown")
 
 async def daily_reminder():
     while True:
@@ -236,7 +304,6 @@ async def start_web_server():
     await site.start()
 
 async def main():
-    await set_main_menu(bot)  # Реєструємо меню команд при запуску
     asyncio.create_task(daily_reminder())
     await asyncio.gather(
         start_web_server(),
