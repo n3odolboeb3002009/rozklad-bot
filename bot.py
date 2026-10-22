@@ -58,6 +58,20 @@ async def send_schedule(message: types.Message):
             text += f"🟢 **{date_str} ({day_name}):** {pair[0]} та {pair[1]}\n"
     await message.answer(text, parse_mode="Markdown")
 
+@dp.message(Command("help"))
+async def send_help(message: types.Message):
+    text = (
+        "🤖 **Доступные команды бота:**\n\n"
+        "• `/schedule` — Показать график чергувания на неделю\n"
+        "• `/help` — Показать список доступных команд\n"
+    )
+    if message.from_user.id == ADMIN_ID:
+        text += (
+            "\n👑 **Команды администратора:**\n"
+            "• `/replace Прізвище Ім'я По батькові` — Перенести студента в конец очереди"
+        )
+    await message.answer(text, parse_mode="Markdown")
+
 @dp.message(Command("replace"))
 async def replace_student(message: types.Message):
     if message.from_user.id != ADMIN_ID:
@@ -90,7 +104,6 @@ async def start_web_server():
     logging.info(f"🟢 Web server successfully started and listening on port {port}")
 
 async def main():
-    # Параллельный запуск веб-сервера и телеграм-бота
     await asyncio.gather(
         start_web_server(),
         dp.start_polling(bot)
