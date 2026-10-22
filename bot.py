@@ -6,7 +6,6 @@ from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from aiohttp import web
 
-# Токен и настройки
 API_TOKEN = '8649918373:AAHkW1z6a58FWPiyqwdQNnlo6VfBlkmIhDE'
 ADMIN_ID = 5211180124
 
@@ -15,7 +14,6 @@ logging.basicConfig(level=logging.INFO)
 bot = Bot(token=API_TOKEN)
 dp = Dispatcher()
 
-# Повний список 28 студентів (без Харишина та Гриціва)
 STUDENTS = [
     "Абіякін Олександр Ігорович", "Бережанський Владислав Олександрович", "Било Владислав Віталійович",
     "Була Олексій Богданович", "Вітенько Катерина Олегівна", "Гніздів Роман Володимирович",
@@ -60,8 +58,8 @@ async def send_schedule(message: types.Message):
 
 @dp.message(Command("list"))
 async def show_students_list(message: types.Message):
-    text = "📋 **Список студентів КІ-106:**\n\n"
-    for i, name in enumerate(STUDENTS, 1):
+    text = "📋 **Поточний порядок черги (КІ-106):**\n\n"
+    for i, name in enumerate(current_student_list, 1):
         text += f"{i}. {name}\n"
     await message.answer(text, parse_mode="Markdown")
 
@@ -69,47 +67,47 @@ async def show_students_list(message: types.Message):
 async def send_help(message: types.Message):
     text = (
         "🤖 **Доступні команди бота:**\n\n"
-        "• `/schedule` — Показать график чергування на тиждень\n"
-        "• `/list` — Показати повний список студентів з номерами\n"
-        "• `/help` — Показати список доступних команд\n"
+        "• `/schedule` — Графік чергування на тиждень\n"
+        "• `/list` — Поточний порядок черги студентів\n"
+        "• `/help` — Список команд\n"
     )
     if message.from_user.id == ADMIN_ID:
         text += (
             "\n👑 **Команди адміністратора:**\n"
-            "• `/replace [номер або ПІБ]` — Перенести студента в кінець черги\n"
-            "_Приклад:_ `/replace 17` або `/replace Маличок`"
+            "• `/replace [номер1] [номер2]` — Поміняти двох студентів місцями (наприклад: `/replace 1 6`)\n"
+            "• `/skip` — Зсунути чергу на 1 людину вправо (пропустити поточного)\n"
         )
     await message.answer(text, parse_mode="Markdown")
 
 @dp.message(Command("replace"))
-async def replace_student(message: types.Message):
+async def replace_students(message: types.Message):
     if message.from_user.id != ADMIN_ID:
         await message.answer("❌ Ця команда доступна тільки адміністратору.")
         return
-    args = message.text.split(maxsplit=1)
-    if len(args) < 2:
-        await message.answer("⚠️ Вкажіть номер або ПІБ: `/replace 17` або `/replace Маличок`", parse_mode="Markdown")
+    args = message.text.split()
+    if len(args) < 3 or not args[1].isdigit() or not args[2].isdigit():
+        await message.answer("⚠️ Вкажіть два числа: `/replace 1 6`", parse_mode="Markdown")
         return
     
-    query = args[1].strip()
-    name_to_replace = None
+    idx1 = int(args[1]) - 1
+    idx2 = int(args[2]) - 1
 
-    if query.isdigit():
-        idx = int(query) - 1
-        if 0 <= idx < len(STUDENTS):
-            name_to_replace = STUDENTS[idx]
+    if 0 <= idx1 < len(current_student_list) and 0 <= idx2 < len(current_student_list):
+        current_student_list[idx1], current_student_list[idx2] = current_student_list[idx2], current_student_list[idx1]
+        await message.answer(f"✅ Успішно поміняно місцями:\n1) {current_student_list[idx2]}\n2) {current_student_list[idx1]}", parse_mode="Markdown")
     else:
-        for student in STUDENTS:
-            if query.lower() in student.lower():
-                name_to_replace = student
-                break
+        await message.answer("❌ Неправильні номери студентів.")
 
-    if name_to_replace and name_to_replace in current_student_list:
-        current_student_list.remove(name_to_replace)
-        current_student_list.append(name_to_replace)
-        await message.answer(f"✅ **{name_to_replace}** перенесено в кінець черги.", parse_mode="Markdown")
-    else:
-        await message.answer("❌ Студента не знайдено за цим номером або ім'ям.")
+@dp.message(Command("skip"))
+async def skip_student(message: types.Message):
+    if message.from_user.id != ADMIN_ID:
+        await message.answer("❌ Ця команда доступна тільки адміністратору.")
+        return
+    
+    # Переносимо першу людину на одну позицію вправо (на 2-ге місце)
+    first = current_student_list.pop(0)
+    current_student_list.insert(1, first)
+    await message.answer(f"✅ Чергу зміщено. Студент **{first}** пропущений на одну позицію вперед.", parse_mode="Markdown")
 
 async def handle_ping(request):
     return web.Response(text="Bot is running!")
@@ -122,7 +120,6 @@ async def start_web_server():
     port = int(os.environ.get("PORT", 10000))
     site = web.TCPSite(runner, '0.0.0.0', port)
     await site.start()
-    logging.info(f"🟢 Web server successfully started and listening on port {port}")
 
 async def main():
     await asyncio.gather(
