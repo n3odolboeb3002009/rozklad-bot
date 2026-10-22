@@ -17,7 +17,7 @@ logging.basicConfig(level=logging.INFO)
 bot = Bot(token=API_TOKEN)
 dp = Dispatcher()
 
-# Незмінний початковий список студентів
+# Постійний непорушний список студентів (номери 1-28 назавжди зафіксовані)
 STUDENTS = [
     "Абіякін Олександр Ігорович", "Бережанський Владислав Олександрович", "Било Владислав Віталійович",
     "Була Олексій Богданович", "Вітенько Катерина Олегівна", "Гніздів Роман Володимирович",
@@ -31,25 +31,25 @@ STUDENTS = [
     "Фурман Максим Миколайович"
 ]
 
-# Віртуальна черга для розкладу (змінюється командами)
-current_student_list = STUDENTS.copy()
-excluded_students = set()
+# Черга у вигляді індексів (не змінює номери людей у базовому списку)
+queue_indices = list(range(len(STUDENTS)))
+excluded_indices = set()
 START_DATE = date(2026, 1, 1)
 
-def get_active_students():
-    return [s for s in current_student_list if s not in excluded_students]
+def get_active_queue():
+    return [idx for idx in queue_indices if idx not in excluded_indices]
 
 def get_duty_pair_for_date(target_date: date):
-    active_list = get_active_students()
-    if not active_list or target_date.weekday() == 6:
+    active_q = get_active_queue()
+    if not active_q or target_date.weekday() == 6:
         return None
     
     days_diff = (target_date - START_DATE).days
     total_working_days = sum(1 for d in range(days_diff) if (START_DATE + timedelta(days=d)).weekday() != 6) if days_diff > 0 else 0
     
-    idx = (total_working_days * 2) % len(active_list)
-    p1 = active_list[idx]
-    p2 = active_list[(idx + 1) % len(active_list)]
+    idx = (total_working_days * 2) % len(active_q)
+    p1 = STUDENTS[active_q[idx]]
+    p2 = STUDENTS[active_q[(idx + 1) % len(active_q)]]
     return p1, p2
 
 async def set_main_menu(bot: Bot):
@@ -58,7 +58,7 @@ async def set_main_menu(bot: Bot):
         BotCommand(command="history", description="Історія минулих чергувань"),
         BotCommand(command="stats", description="Статистика чергувань"),
         BotCommand(command="find", description="Пошук дат чергувань студента"),
-        BotCommand(command="list", description="Поточний порядок черги"),
+        BotCommand(command="list", description="Список студентів (постійні номери)"),
         BotCommand(command="help", description="Список команд")
     ]
     await bot.set_my_commands(commands)
@@ -112,20 +112,20 @@ async def send_stats(message: types.Message):
     while current_d <= today:
         if current_d.weekday() != 6:
             days_diff = (current_d - START_DATE).days
-            active_list = get_active_students()
-            if active_list:
+            active_q = get_active_queue()
+            if active_q:
                 total_working_days = sum(1 for d in range(days_diff) if (START_DATE + timedelta(days=d)).weekday() != 6) if days_diff > 0 else 0
-                idx = (total_working_days * 2) % len(active_list)
-                p1 = active_list[idx]
-                p2 = active_list[(idx + 1) % len(active_list)]
+                idx = (total_working_days * 2) % len(active_q)
+                p1 = STUDENTS[active_q[idx]]
+                p2 = STUDENTS[active_q[(idx + 1) % len(active_q)]]
                 if p1 in counts: counts[p1] += 1
                 if p2 in counts: counts[p2] += 1
         current_d += timedelta(days=1)
 
     sorted_stats = sorted(counts.items(), key=lambda x: x[1], reverse=True)
-    text = "📊 **Статистика чергувань (скільки разів чергували):**\n\n"
+    text = "📊 **Статистика чергувань:**\n\n"
     for name, count in sorted_stats:
-        status = " (тимчасово видалений)" if name in excluded_students else ""
+        status = " (тимчасово видалений)" if STUDENTS.index(name) in excluded_indices else ""
         text += f"• {name}{status} — {count} раз(и)\n"
     await message.answer(text, parse_mode="Markdown")
 
@@ -156,9 +156,9 @@ async def find_student_duties(message: types.Message):
 
 @dp.message(Command("list"))
 async def show_students_list(message: types.Message):
-    text = "📋 **Поточний порядок черги (КІ-106):**\n\n"
-    for i, name in enumerate(current_student_list, 1):
-        status = " 🔴 *(тимчасово видалений)*" if name in excluded_students else ""
+    text = "📋 **Список студентів КІ-106:**\n\n"
+    for i, name in enumerate(STUDENTS, 1):
+        status = " 🔴 *(тимчасово видалений)*" if (i - 1) in excluded_indices else ""
         text += f"{i}. {name}{status}\n"
     await message.answer(text, parse_mode="Markdown")
 
@@ -170,14 +170,14 @@ async def send_help(message: types.Message):
         "• `/history` — Історія минулих чергувань\n"
         "• `/stats` — Статистика кількості чергувань\n"
         "• `/find [Прізвище]` — Пошук дат чергувань студента\n"
-        "• `/list` — Поточний порядок черги\n"
+        "• `/list` — Список студентів\n"
         "• `/help` — Список команд\n"
     )
     if message.from_user.id in ADMIN_IDS:
         text += (
             "\n👑 **Команди адміністратора:**\n"
-            "• `/replace [н1] [н2]` — Поміняти двох місцями (напр: `/replace 1 6`)\n"
-            "• `/skip` — Підняти останнього вгору (на початок черги)\n"
+            "• `/replace [н1] [н2]` — Поміняти двох у черзі (напр: `/replace 1 6`)\n"
+            "• `/skip` — Зсунути чергу вгору (останній стає першим)\n"
             "• `/exclude [номер]` — Тимчасово приховати студента\n"
             "• `/include [номер]` — Повернути студента у чергу\n"
             "• `/reset` — Скинути чергу до початкового стану\n"
@@ -191,15 +191,17 @@ async def replace_students(message: types.Message):
         return
     args = message.text.split()
     if len(args) < 3 or not args[1].isdigit() or not args[2].isdigit():
-        await message.answer("⚠️ **Неправильний формат!**\nПриклад використання:\n`/replace 1 6` (поміняти місцями 1-го і 6-го)", parse_mode="Markdown")
+        await message.answer("⚠️ **Неправильний формат!**\nПриклад використання:\n`/replace 1 6` (номери зі списку)", parse_mode="Markdown")
         return
     
-    idx1 = int(args[1]) - 1
-    idx2 = int(args[2]) - 1
+    pos1 = int(args[1]) - 1
+    pos2 = int(args[2]) - 1
 
-    if 0 <= idx1 < len(current_student_list) and 0 <= idx2 < len(current_student_list):
-        current_student_list[idx1], current_student_list[idx2] = current_student_list[idx2], current_student_list[idx1]
-        await message.answer(f"✅ Успішно поміняно місцями:\n1) {current_student_list[idx2]}\n2) {current_student_list[idx1]}", parse_mode="Markdown")
+    if pos1 in queue_indices and pos2 in queue_indices:
+        idx1 = queue_indices.index(pos1)
+        idx2 = queue_indices.index(pos2)
+        queue_indices[idx1], queue_indices[idx2] = queue_indices[idx2], queue_indices[idx1]
+        await message.answer(f"✅ Успішно поміняно місцями у черзі:\n1) {STUDENTS[pos1]}\n2) {STUDENTS[pos2]}", parse_mode="Markdown")
     else:
         await message.answer("❌ Неправильні номери студентів.")
 
@@ -209,18 +211,16 @@ async def skip_student(message: types.Message):
         await message.answer("❌ Ця команда доступна тільки адміністратору.")
         return
     
-    active_list = get_active_students()
-    if not active_list:
+    active_q = get_active_queue()
+    if not active_q:
         await message.answer("❌ Немає активних студентів у списку.")
         return
     
-    last_student = active_list[-1]
-    orig_idx = current_student_list.index(last_student)
+    last_pos = active_q[-1]
+    queue_indices.remove(last_pos)
+    queue_indices.insert(0, last_pos)
     
-    current_student_list.pop(orig_idx)
-    current_student_list.insert(0, last_student)
-    
-    await message.answer(f"✅ Чергу зсунуто вгору. Студент **{last_student}** тепер перший у черзі!", parse_mode="Markdown")
+    await message.answer(f"✅ Чергу зсунуто вгору. Студент **{STUDENTS[last_pos]}** тепер перший у черзі!", parse_mode="Markdown")
 
 @dp.message(Command("exclude"))
 async def exclude_student(message: types.Message):
@@ -233,10 +233,9 @@ async def exclude_student(message: types.Message):
         return
     
     idx = int(args[1]) - 1
-    if 0 <= idx < len(current_student_list):
-        student = current_student_list[idx]
-        excluded_students.add(student)
-        await message.answer(f"🔴 Студент **{student}** тимчасово видалений з чергування.", parse_mode="Markdown")
+    if 0 <= idx < len(STUDENTS):
+        excluded_indices.add(idx)
+        await message.answer(f"🔴 Студент **{STUDENTS[idx]}** тимчасово видалений з чергування.", parse_mode="Markdown")
     else:
         await message.answer("❌ Неправильний номер студента.")
 
@@ -251,11 +250,10 @@ async def include_student(message: types.Message):
         return
     
     idx = int(args[1]) - 1
-    if 0 <= idx < len(current_student_list):
-        student = current_student_list[idx]
-        if student in excluded_students:
-            excluded_students.remove(student)
-            await message.answer(f"🟢 Студент **{student}** повернутий у чергу.", parse_mode="Markdown")
+    if 0 <= idx < len(STUDENTS):
+        if idx in excluded_indices:
+            excluded_indices.remove(idx)
+            await message.answer(f"🟢 Студент **{STUDENTS[idx]}** повернутий у чергу.", parse_mode="Markdown")
         else:
             await message.answer("ℹ️ Цей студент і так активний у черзі.")
     else:
@@ -267,10 +265,10 @@ async def reset_list(message: types.Message):
         await message.answer("❌ Ця команда доступна тільки адміністратору.")
         return
     
-    global current_student_list, excluded_students
-    current_student_list = STUDENTS.copy()
-    excluded_students.clear()
-    await message.answer("🔄 Список черги успішно скинуто, а всі видалення скасовані!", parse_mode="Markdown")
+    global queue_indices, excluded_indices
+    queue_indices = list(range(len(STUDENTS)))
+    excluded_indices.clear()
+    await message.answer("🔄 Чергу та видалення успішно скинуто до початкового стану!", parse_mode="Markdown")
 
 async def daily_reminder():
     while True:
