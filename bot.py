@@ -175,7 +175,7 @@ async def send_help(message: types.Message):
         text += (
             "\n👑 **Команди адміністратора:**\n"
             "• `/replace [н1] [н2]` — Поміняти двох місцями (напр: `/replace 1 6`)\n"
-            "• `/skip` — Пропустити поточного (зсунути чергу вперед)\n"
+            "• `/skip` — Підняти останнього вгору (на початок черги)\n"
             "• `/exclude [номер]` — Тимчасово приховати студента\n"
             "• `/include [номер]` — Повернути студента у чергу\n"
             "• `/reset` — Скинути чергу до початкового стану\n"
@@ -212,13 +212,13 @@ async def skip_student(message: types.Message):
         await message.answer("❌ Немає активних студентів у списку.")
         return
     
-    first_student = active_list[0]
-    orig_idx = current_student_list.index(first_student)
+    last_student = active_list[-1]
+    orig_idx = current_student_list.index(last_student)
     
     current_student_list.pop(orig_idx)
-    current_student_list.insert(0, first_student)
+    current_student_list.insert(0, last_student)
     
-    await message.answer(f"✅ Чергу зсунуто. Студент **{first_student}** пропущений вперед.", parse_mode="Markdown")
+    await message.answer(f"✅ Чергу зсунуто вгору. Студент **{last_student}** тепер перший у черзі!", parse_mode="Markdown")
 
 @dp.message(Command("exclude"))
 async def exclude_student(message: types.Message):
