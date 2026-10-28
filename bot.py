@@ -68,7 +68,7 @@ async def set_main_menu(bot: Bot):
 async def send_start(message: types.Message):
     text = (
         "**Бот розкладу чергувань групи КІ-106**\n"
-        "Автор: ([@l5211180124](https://t.me/l5211180124))\n\n"
+        "Автор: Маличок Діана ([@l5211180124](https://t.me/l5211180124))\n\n"
         "Скористайтеся командою /help, щоб переглянути список доступних команд."
     )
     await message.answer(text, parse_mode="Markdown", disable_web_page_preview=True)
@@ -188,7 +188,7 @@ async def send_help(message: types.Message):
         text += (
             "\n👑 **Команди адміністратора:**\n"
             "• `/replace [н1] [н2]` — Поміняти двох у черзі (напр: `/replace 1 6`)\n"
-            "• `/skip` — Зсунути чергу вгору (останній стає першим)\n"
+            "• `/skip` — Пропустити першого у черзі (зсунути чергу вправо)\n"
             "• `/exclude [номер]` — Тимчасово приховати студента\n"
             "• `/include [номер]` — Повернути студента у чергу\n"
             "• `/reset` — Скинути чергу до початкового стану\n"
@@ -227,11 +227,12 @@ async def skip_student(message: types.Message):
         await message.answer("❌ Немає активних студентів у списку.")
         return
     
-    last_pos = active_q[-1]
-    queue_indices.remove(last_pos)
-    queue_indices.insert(0, last_pos)
+    # Беремо першого в активній черзі і переносимо його в самий кінець активної черги (зсув вправо)
+    first_pos = active_q[0]
+    queue_indices.remove(first_pos)
+    queue_indices.append(first_pos)
     
-    await message.answer(f"✅ Чергу зсунуто вгору. Студент **{STUDENTS[last_pos]}** тепер перший у черзі!", parse_mode="Markdown")
+    await message.answer(f"✅ Чергу зсунуто. Студент **{STUDENTS[first_pos]}** пропущений вперед.", parse_mode="Markdown")
 
 @dp.message(Command("exclude"))
 async def exclude_student(message: types.Message):
