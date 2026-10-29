@@ -188,7 +188,8 @@ async def send_help(message: types.Message):
         text += (
             "\n👑 **Команди адміністратора:**\n"
             "• `/replace [н1] [н2]` — Поміняти двох у черзі (напр: `/replace 1 6`)\n"
-            "• `/skip` — Пропустити першого у черзі (зсунути чергу вправо)\n"
+            "• `/skip` — Пропустити поточних (зсунути чергу вправо)\n"
+            "• `/setpair [номери або прізвища]` — Почати графік з конкретної пари\n"
             "• `/exclude [номер]` — Тимчасово приховати студента\n"
             "• `/include [номер]` — Повернути студента у чергу\n"
             "• `/reset` — Скинути чергу до початкового стану\n"
@@ -223,16 +224,88 @@ async def skip_student(message: types.Message):
         return
     
     active_q = get_active_queue()
-    if not active_q:
-        await message.answer("❌ Немає активних студентів у списку.")
+    if len(active_q) < 2:
+        await message.answer("❌ Недостатньо активних студентів у списку.")
         return
     
-    # Беремо першого в активній черзі і переносимо його в самий кінець активної черги (зсув вправо)
-    first_pos = active_q[0]
-    queue_indices.remove(first_pos)
-    queue_indices.append(first_pos)
+    p1 = active_q.pop(0)
+    p2 = active_q.pop(0)
+    active_q.append(p1)
+    active_q.append(p2)
     
-    await message.answer(f"✅ Чергу зсунуто. Студент **{STUDENTS[first_pos]}** пропущений вперед.", parse_mode="Markdown")
+    global queue_indices
+    other_indices = [idx for idx in queue_indices if idx not in active_q]
+    queue_indices = active_q + other_indices
+    
+    await message.answer("✅ Чергу успішно зсунуто вправо (сьогоднішня пара пропущена).", parse_mode="Markdown")
+
+@dp.message(Command("setpair"))
+async def set_pair(message: types.Message):
+    if message.from_user.id not in ADMIN_IDS:
+        await message.answer("❌ Ця команда доступна тільки адміністратору.")
+        return
+    
+    text_input = message.text.replace("/setpair", "").strip()
+    if not text_input:
+        await message.answer("⚠️ **Не вказано параметри!**\nПриклад за номерами: `/setpair 24 25`\nПриклад за прізвищами: `/setpair Серба, Сидій`", parse_mode="Markdown")
+        return
+    
+    parts = [p.strip() for p in text_input.replace(" та ", ",").split(",")]
+    if len(parts) < 2:
+        parts = text_input.split()
+        
+    if len(parts) < 2:
+        await message.answer("⚠️ Потрібно вказати **два** числа або два прізвища.\nПриклад: `/setpair 24 25`", parse_mode="Markdown")
+        return
+    
+    idx1, idx2 = None, None
+    
+    # Перевіряємо, чи введено номери (наприклад, 24 та 25)
+    if parts[0].isdigit() and parts[1].isdigit():
+        idx1 = int(parts[0]) - 1
+        idx2 = int(parts[1]) - 1
+        if not (0 <= idx1 < len(STUDENTS) and 0 <= idx2 < len(STUDENTS)):
+            await message.answer("❌ **Помилка:** Неправильні номери студентів (мають бути від 1 до 28).", parse_mode="Markdown")
+            return
+    else:
+        # Шукаємо за прізвищами
+        q1_query, q2_query = parts[0].lower(), parts[1].lower()
+        for i, s in enumerate(STUDENTS):
+            s_lower = s.lower()
+            if idx1 is None and q1_query in s_lower:
+                idx1 = i
+            elif idx2 is None and q2_query in s_lower:
+                idx2 = i
+                
+        if idx1 is None or idx2 is None:
+            await message.answer("❌ **Помилка:** Одне або обидва прізвища не знайдено у списку групи КІ-106.", parse_mode="Markdown")
+            return
+            
+    active_q = get_active_queue()
+    if idx1 not in active_q or idx2 not in active_q:
+        await message.answer("❌ **Помилка:** Один із студентів тимчасово виключений (`/exclude`). Спочатку поверніть його через `/include`.", parse_mode="Markdown")
+        return
+        
+    # Перевіряємо, чи йдуть вони строго парою (послідовно в активній черзі)
+    pos1 = active_q.index(idx1)
+    pos2 = active_q.index(idx2)
+    
+    is_adjacent = (pos2 == pos1 + 1) or (pos1 == len(active_q) - 1 and pos2 == 0)
+    
+    if not is_adjacent:
+        await message.answer(f"❌ **Помилка:** Студенти **{STUDENTS[idx1]}** та **{STUDENTS[idx2]}** не йдуть наступними в черзі один за одним!", parse_mode="Markdown")
+        return
+        
+    # Зсуваємо активну чергу так, щоб idx1 став першим
+    global queue_indices
+    while active_q[0] != idx1:
+        item = active_q.pop(0)
+        active_q.append(item)
+        
+    other_indices = [idx for idx in queue_indices if idx not in active_q]
+    queue_indices = active_q + other_indices
+    
+    await message.answer(f"✅ Графік успішно переналаштовано! Першими на чергуванні тепер встановлені:\n🟢 **{STUDENTS[idx1]} та {STUDENTS[idx2]}**", parse_mode="Markdown")
 
 @dp.message(Command("exclude"))
 async def exclude_student(message: types.Message):
@@ -319,7 +392,7 @@ async def start_web_server():
 async def main():
     await set_main_menu(bot)
     asyncio.create_task(daily_reminder())
-    await asyncio.gather(
+    asyncio.gather(
         start_web_server(),
         dp.start_polling(bot)
     )
