@@ -31,10 +31,12 @@ STUDENTS = [
     "Фурман Максим Миколайович"
 ]
 
-# Черга у вигляді індексів (не змінює номери людей у базовому списку)
 queue_indices = list(range(len(STUDENTS)))
 excluded_indices = set()
-START_DATE = date(2026, 1, 1)
+
+# Динамічна дата початку, від якої рахується розклад. 
+# Змінюється автоматично при /setpair або /skip, щоб сьогодні чергували саме ті, хто треба!
+current_start_date = date(2026, 1, 1)
 
 def get_active_queue():
     return [idx for idx in queue_indices if idx not in excluded_indices]
@@ -44,8 +46,14 @@ def get_duty_pair_for_date(target_date: date):
     if not active_q or target_date.weekday() == 6:
         return None
     
-    days_diff = (target_date - START_DATE).days
-    total_working_days = sum(1 for d in range(days_diff) if (START_DATE + timedelta(days=d)).weekday() != 6) if days_diff > 0 else 0
+    # Рахуємо дні від поточної базової дати
+    days_diff = (target_date - current_start_date).days
+    
+    # Якщо цільова дата раніше базової, повертаємо першу пару активної черги
+    if days_diff < 0:
+        return STUDENTS[active_q[0]], STUDENTS[active_q[1 % len(active_q)]]
+    
+    total_working_days = sum(1 for d in range(days_diff) if (current_start_date + timedelta(days=d)).weekday() != 6) if days_diff > 0 else 0
     
     idx = (total_working_days * 2) % len(active_q)
     p1 = STUDENTS[active_q[idx]]
@@ -118,13 +126,15 @@ async def send_stats(message: types.Message):
     today = date.today()
     counts = {student: 0 for student in STUDENTS}
     
-    current_d = START_DATE
+    # Статистику рахуємо від початкової дати до сьогодні
+    base_d = date(2026, 1, 1)
+    current_d = base_d
     while current_d <= today:
         if current_d.weekday() != 6:
-            days_diff = (current_d - START_DATE).days
+            days_diff = (current_d - base_d).days
             active_q = get_active_queue()
             if active_q:
-                total_working_days = sum(1 for d in range(days_diff) if (START_DATE + timedelta(days=d)).weekday() != 6) if days_diff > 0 else 0
+                total_working_days = sum(1 for d in range(days_diff) if (base_d + timedelta(days=d)).weekday() != 6) if days_diff > 0 else 0
                 idx = (total_working_days * 2) % len(active_q)
                 p1 = STUDENTS[active_q[idx]]
                 p2 = STUDENTS[active_q[(idx + 1) % len(active_q)]]
@@ -188,8 +198,8 @@ async def send_help(message: types.Message):
         text += (
             "\n👑 **Команди адміністратора:**\n"
             "• `/replace [н1] [н2]` — Поміняти двох у черзі (напр: `/replace 1 6`)\n"
-            "• `/skip` — Пропустити поточних (зсунути чергу вправо)\n"
-            "• `/setpair [номери або прізвища]` — Почати графік з конкретної пари\n"
+            "• `/skip` — Пропустити сьогоднішніх (зсунути чергу з сьогодні вправо)\n"
+            "• `/setpair [номери або прізвища]` — Встановити пару на сьогодні\n"
             "• `/exclude [номер]` — Тимчасово приховати студента\n"
             "• `/include [номер]` — Повернути студента у чергу\n"
             "• `/reset` — Скинути чергу до початкового стану\n"
@@ -228,16 +238,26 @@ async def skip_student(message: types.Message):
         await message.answer("❌ Недостатньо активних студентів у списку.")
         return
     
+    # Зсуваємо сьогоднішню пару в кінець, а базову дату робимо сьогоднішньою
+    global current_start_date, queue_indices
+    today = date.today()
+    
+    # Визначаємо хто чергує сьогодні ДО зсуву
+    p1_old, p2_old = get_duty_pair_for_date(today)
+    
     p1 = active_q.pop(0)
     p2 = active_q.pop(0)
     active_q.append(p1)
     active_q.append(p2)
     
-    global queue_indices
     other_indices = [idx for idx in queue_indices if idx not in active_q]
     queue_indices = active_q + other_indices
+    current_start_date = today
     
-    await message.answer("✅ Чергу успішно зсунуто вправо (сьогоднішня пара пропущена).", parse_mode="Markdown")
+    # Визначаємо нову пару на сьогодні після зсуву
+    p1_new, p2_new = get_duty_pair_for_date(today)
+    
+    await message.answer(f"✅ Чергу зсунуто з сьогоднішнього дня!\nСьогодні чергують: **{p1_new} та {p2_new}**", parse_mode="Markdown")
 
 @dp.message(Command("setpair"))
 async def set_pair(message: types.Message):
@@ -259,13 +279,15 @@ async def set_pair(message: types.Message):
         return
     
     idx1, idx2 = None, None
+    active_q = get_active_queue()
     
     if parts[0].isdigit() and parts[1].isdigit():
-        idx1 = int(parts[0]) - 1
-        idx2 = int(parts[1]) - 1
-        if not (0 <= idx1 < len(STUDENTS) and 0 <= idx2 < len(STUDENTS)):
+        num1 = int(parts[0]) - 1
+        num2 = int(parts[1]) - 1
+        if not (0 <= num1 < len(STUDENTS) and 0 <= num2 < len(STUDENTS)):
             await message.answer("❌ **Помилка:** Неправильні номери студентів (мають бути від 1 до 28).", parse_mode="Markdown")
             return
+        idx1, idx2 = num1, num2
     else:
         q1_query, q2_query = parts[0].lower(), parts[1].lower()
         for i, s in enumerate(STUDENTS):
@@ -279,7 +301,6 @@ async def set_pair(message: types.Message):
             await message.answer("❌ **Помилка:** Одне або обидва прізвища не знайдено у списку групи КІ-106.", parse_mode="Markdown")
             return
             
-    active_q = get_active_queue()
     if idx1 not in active_q or idx2 not in active_q:
         await message.answer("❌ **Помилка:** Один із студентів тимчасово виключений (`/exclude`). Спочатку поверніть його через `/include`.", parse_mode="Markdown")
         return
@@ -290,10 +311,10 @@ async def set_pair(message: types.Message):
     is_adjacent = (pos2 == pos1 + 1) or (pos1 == len(active_q) - 1 and pos2 == 0)
     
     if not is_adjacent:
-        await message.answer(f"❌ **Помилка:** Студенти **{STUDENTS[idx1]}** та **{STUDENTS[idx2]}** не йдуть наступними в черзі один за одним!", parse_mode="Markdown")
+        await message.answer(f"❌ **Помилка:** Студенти **{STUDENTS[idx1]}** та **{STUDENTS[idx2]}** не йдуть наступними в поточній черзі один за одним!", parse_mode="Markdown")
         return
         
-    global queue_indices
+    global queue_indices, current_start_date
     while active_q[0] != idx1:
         item = active_q.pop(0)
         active_q.append(item)
@@ -301,7 +322,10 @@ async def set_pair(message: types.Message):
     other_indices = [idx for idx in queue_indices if idx not in active_q]
     queue_indices = active_q + other_indices
     
-    await message.answer(f"✅ Графік успішно переналаштовано! Першими на чергуванні тепер встановлені:\n🟢 **{STUDENTS[idx1]} та {STUDENTS[idx2]}**", parse_mode="Markdown")
+    # Встановлюємо сьогоднішній день базовим, щоб нова пара діяла прямо відсьогодні
+    current_start_date = date.today()
+    
+    await message.answer(f"✅ Графік на сьогодні успішно встановлено!\nПершими на чергуванні тепер: **{STUDENTS[idx1]} та {STUDENTS[idx2]}**", parse_mode="Markdown")
 
 @dp.message(Command("exclude"))
 async def exclude_student(message: types.Message):
@@ -346,10 +370,11 @@ async def reset_list(message: types.Message):
         await message.answer("❌ Ця команда доступна тільки адміністратору.")
         return
     
-    global queue_indices, excluded_indices
+    global queue_indices, excluded_indices, current_start_date
     queue_indices = list(range(len(STUDENTS)))
     excluded_indices.clear()
-    await message.answer("🔄 Чергу та видалення успішно скинуто до початкового стану!", parse_mode="Markdown")
+    current_start_date = date(2026, 1, 1)
+    await message.answer("🔄 Чергу та дату початку успішно скинуто до початкового стану!", parse_mode="Markdown")
 
 async def daily_reminder():
     while True:
@@ -388,7 +413,6 @@ async def start_web_server():
 async def main():
     await set_main_menu(bot)
     asyncio.create_task(daily_reminder())
-    # Виправляємо запуск асинхронних задач через asyncio.gather з await
     await asyncio.gather(
         start_web_server(),
         dp.start_polling(bot)
