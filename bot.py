@@ -260,7 +260,6 @@ async def set_pair(message: types.Message):
     
     idx1, idx2 = None, None
     
-    # Перевіряємо, чи введено номери (наприклад, 24 та 25)
     if parts[0].isdigit() and parts[1].isdigit():
         idx1 = int(parts[0]) - 1
         idx2 = int(parts[1]) - 1
@@ -268,7 +267,6 @@ async def set_pair(message: types.Message):
             await message.answer("❌ **Помилка:** Неправильні номери студентів (мають бути від 1 до 28).", parse_mode="Markdown")
             return
     else:
-        # Шукаємо за прізвищами
         q1_query, q2_query = parts[0].lower(), parts[1].lower()
         for i, s in enumerate(STUDENTS):
             s_lower = s.lower()
@@ -286,7 +284,6 @@ async def set_pair(message: types.Message):
         await message.answer("❌ **Помилка:** Один із студентів тимчасово виключений (`/exclude`). Спочатку поверніть його через `/include`.", parse_mode="Markdown")
         return
         
-    # Перевіряємо, чи йдуть вони строго парою (послідовно в активній черзі)
     pos1 = active_q.index(idx1)
     pos2 = active_q.index(idx2)
     
@@ -296,7 +293,6 @@ async def set_pair(message: types.Message):
         await message.answer(f"❌ **Помилка:** Студенти **{STUDENTS[idx1]}** та **{STUDENTS[idx2]}** не йдуть наступними в черзі один за одним!", parse_mode="Markdown")
         return
         
-    # Зсуваємо активну чергу так, щоб idx1 став першим
     global queue_indices
     while active_q[0] != idx1:
         item = active_q.pop(0)
@@ -392,7 +388,8 @@ async def start_web_server():
 async def main():
     await set_main_menu(bot)
     asyncio.create_task(daily_reminder())
-    asyncio.gather(
+    # Виправляємо запуск асинхронних задач через asyncio.gather з await
+    await asyncio.gather(
         start_web_server(),
         dp.start_polling(bot)
     )
